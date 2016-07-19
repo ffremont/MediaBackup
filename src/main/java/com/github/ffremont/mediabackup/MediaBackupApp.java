@@ -37,10 +37,14 @@ public class MediaBackupApp {
 
     private static final int DATE_TIME_ORIGINAL = 36867;
     private static Map<Path, LocalDateTime> dates = new HashMap<>();
+    private static Long blockCount;
 
     public static void main(String[] args) throws IOException {
+        long blockSize = args.length > 0 ? Long.valueOf(args[0]) : -1;
+
         Path from = Paths.get("from");
         Path to = Paths.get("to");
+        Path blocs = Paths.get("blocs");
 
         Files.walk(from).forEach(filePath -> {
             if (Files.isRegularFile(filePath)) {
@@ -50,13 +54,14 @@ public class MediaBackupApp {
                     Iterable<Directory> it = metadata.getDirectories();
                     it.forEach((Directory dir) -> {
                         dir.getTags().forEach((Tag tag) -> {
-                            if (tag.getTagType() == 36867) {
-                                System.out.println("--------------");
-                                System.out.println(tag.getTagName());
-                                System.out.println(tag.getTagType());
-                                System.out.println(tag.getTagTypeHex());
-                                System.out.println(dir.getDate(tag.getTagType()));
-                                System.out.println("--------------");
+                            if (tag.getTagType() == DATE_TIME_ORIGINAL) {
+                                /*System.out.println("--------------");
+                                 System.out.println(tag.getTagName());
+                                 System.out.println(tag.getTagType());
+                                 System.out.println(tag.getTagTypeHex());
+                                 System.out.println(dir.getDate(tag.getTagType()));
+                                 System.out.println("--------------");*/
+                                System.out.println(filePath);
                                 dates.put(filePath, LocalDateTime.ofInstant(dir.getDate(tag.getTagType()).toInstant(), ZoneId.systemDefault()));
                             }
                         });
@@ -79,9 +84,9 @@ public class MediaBackupApp {
                 Files.createDirectories(destination);
                 //Metadata metadata = ImageMetadataReader.readMetadata(imagePath);
                 Files.copy(
-                        entry.getKey(), 
+                        entry.getKey(),
                         Paths.get(
-                                destination.toAbsolutePath().toString(), 
+                                destination.toAbsolutePath().toString(),
                                 entry.getKey().getFileName().toString()
                         ), StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException ex) {
@@ -89,5 +94,19 @@ public class MediaBackupApp {
             }
         });
 
+        if (blockSize != -1) {
+            int blocNb = 1;
+            blockCount = new Long(0);
+            Files.walk(from).forEach((Path filePath) -> {
+                if (Files.isRegularFile(filePath)) {
+                    try {
+                        blockCount += Files.size(filePath);
+                    } catch (IOException ex) {
+                        Logger.getLogger(MediaBackupApp.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                    
+                }
+            });
+        }
     }
 }
