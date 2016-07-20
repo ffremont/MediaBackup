@@ -19,6 +19,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -36,6 +37,8 @@ public class MediaBackupApp {
 
     private static final int DATE_TIME_ORIGINAL = 36867;
     private static Map<LocalDateTime, MetaFile> dates = new TreeMap<>();
+    
+    public static List<Condition> conditions = new ArrayList<>();
 
     private static ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
 
@@ -57,7 +60,23 @@ public class MediaBackupApp {
         long blocsize = System.getProperty("blocsize") != null ? Long.valueOf(System.getProperty("blocsize")) : -1;
         Path from = System.getProperty("from") != null ? Paths.get(System.getProperty("from")) : Paths.get("from");
         Path to = System.getProperty("to") != null ? Paths.get(System.getProperty("to")) : Paths.get("to");
+        boolean byDay = System.getProperty("byDay") != null;
         clear(to);
+        
+        Path legPath = Paths.get("legendes.properties");
+        if(Files.exists(legPath)){
+            Properties legend = new Properties();
+            legend.load(Files.newInputStream(legPath));
+            for(String prop : legend.stringPropertyNames()){
+                String[] parts = prop.split("->");
+                if(parts.length != 2){
+                    throw new RuntimeException("format du fichier legendes invalide a -> b");
+                }
+                
+                conditions.add(Condition.from(parts[0].trim(), parts[1].trim(), legend.getProperty(prop)));
+            }
+            
+        }
 
         Files.walk(from).forEach(filePath -> {
             if (Files.isRegularFile(filePath)) {
@@ -94,7 +113,7 @@ public class MediaBackupApp {
                 i++;
             }
 
-            calls.add(executor.submit(new CopyFile(to, i, entry.getValue())));
+            calls.add(executor.submit(new CopyFile(to, i, entry.getValue(), byDay)));
             sum += entry.getValue().getSize();
         }
 
@@ -106,6 +125,8 @@ public class MediaBackupApp {
             }
         }
         executor.shutdown();
+        
+        System.out.println("Copie déterminée des "+dates.size()+" images");
     }
 
 }
