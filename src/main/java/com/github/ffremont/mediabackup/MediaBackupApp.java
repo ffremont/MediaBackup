@@ -37,20 +37,24 @@ public class MediaBackupApp {
 
     private static final int DATE_TIME_ORIGINAL = 36867;
     private static Map<LocalDateTime, MetaFile> dates = new TreeMap<>();
-    
+    private static List<String> sha1knownCreationDate = new ArrayList<>();
+    private static List<MetaFile> unknown = new ArrayList<>();
+
     public static List<Condition> conditions = new ArrayList<>();
 
     private static ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() * 2);
 
     private static void clear(Path directoryToDelete) {
         try {
-            Files.walk(directoryToDelete).
-                    sorted((a, b) -> b.compareTo(a)). // reverse; files before dirs
-                    forEach(p -> {
-                        try {
-                            Files.delete(p);
-                        } catch (IOException e) { /* ... */ }
-                    });
+            if (Files.exists(directoryToDelete)) {
+                Files.walk(directoryToDelete).
+                        sorted((a, b) -> b.compareTo(a)). // reverse; files before dirs
+                        forEach(p -> {
+                            try {
+                                Files.delete(p);
+                            } catch (IOException e) { /* ... */ }
+                        });
+            }
         } catch (IOException ex) {
             Logger.getLogger(MediaBackupApp.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -62,46 +66,54 @@ public class MediaBackupApp {
         Path to = System.getProperty("to") != null ? Paths.get(System.getProperty("to")) : Paths.get("to");
         boolean byDay = System.getProperty("byDay") != null;
         clear(to);
-        
+
         Path legPath = Paths.get("legendes.properties");
-        if(Files.exists(legPath)){
+        if (Files.exists(legPath)) {
             Properties legend = new Properties();
             legend.load(Files.newInputStream(legPath));
-            for(String prop : legend.stringPropertyNames()){
-                String[] parts = prop.split("->");
-                if(parts.length != 2){
-                    throw new RuntimeException("format du fichier legendes invalide a -> b");
-                }
-                
-                conditions.add(Condition.from(parts[0].trim(), parts[1].trim(), legend.getProperty(prop)));
+            for (String prop : legend.stringPropertyNames()) {
+                conditions.add(Condition.from(prop, legend.getProperty(prop)));
             }
-            
         }
 
-        Files.walk(from).forEach(filePath -> {
+        Files.walk(from).forEach((Path filePath) -> {
             if (Files.isRegularFile(filePath)) {
                 System.out.println(filePath);
+                String hashOfFile = HashFile.sha1(filePath);
+                MetaFile meta = null;
+                try {
+                    meta = new MetaFile(filePath, Files.size(filePath), hashOfFile);
+                } catch (IOException ex) {
+                    Logger.getLogger(MediaBackupApp.class.getName()).log(Level.SEVERE, null, ex);
+                }
                 try {
                     Metadata metadata = ImageMetadataReader.readMetadata(filePath.toAbsolutePath().toFile());
                     Iterable<Directory> it = metadata.getDirectories();
-                    it.forEach((Directory dir) -> {
-                        dir.getTags().forEach((Tag tag) -> {
+                    for (Directory dir : it) {
+                        for (Tag tag : dir.getTags()) {
                             if (tag.getTagType() == DATE_TIME_ORIGINAL) {
+                                sha1knownCreationDate.add(hashOfFile);
                                 System.out.println(filePath);
-                                try {
-                                    LocalDateTime created = LocalDateTime.ofInstant(dir.getDate(tag.getTagType()).toInstant(), ZoneId.systemDefault());
-                                    dates.put(created, new MetaFile(created, filePath, Files.size(filePath)));
-                                } catch (IOException ex) {
-                                    Logger.getLogger(MediaBackupApp.class.getName()).log(Level.SEVERE, null, ex);
+                                LocalDateTime created = LocalDateTime.ofInstant(dir.getDate(tag.getTagType()).toInstant(), ZoneId.systemDefault());
+                                meta.created(created);
+
+                                // on ne prend pas les doublons
+                                if (!dates.values().stream().anyMatch(metaFile -> hashOfFile.equals(metaFile.hash()))) {
+                                    dates.put(created, meta);
                                 }
                             }
-                        });
-                    });
+                        }
+                    }
                 } catch (IOException ex) {
                     Logger.getLogger(MediaBackupApp.class.getName()).log(Level.SEVERE, null, ex);
                 } catch (ImageProcessingException ex) {
                     Logger.getLogger(MediaBackupApp.class.getName()).log(Level.SEVERE, null, ex);
                 }
+
+                if (!sha1knownCreationDate.contains(hashOfFile) && (meta != null)) {
+                    unknown.add(meta);
+                }
+
             }
         });
 
@@ -109,15 +121,24 @@ public class MediaBackupApp {
         long sum = 0;
         List<Future> calls = new ArrayList<>();
         for (Map.Entry<LocalDateTime, MetaFile> entry : dates.entrySet()) {
-            if ((blocsize != -1) && (sum + entry.getValue().getSize() > blocsize)) {
+            if ((blocsize != -1) && (sum + entry.getValue().size() > blocsize)) {
                 i++;
             }
 
-            calls.add(executor.submit(new CopyFile(to, i, entry.getValue(), byDay)));
-            sum += entry.getValue().getSize();
+            calls.add(executor.submit(new CopyFile(from, to, i, entry.getValue(), byDay)));
+            sum += entry.getValue().size();
+        }
+        // toutes les dates inconnues
+        for (MetaFile meta : unknown) {
+            if ((blocsize != -1) && (sum + meta.size() > blocsize)) {
+                i++;
+            }
+
+            calls.add(executor.submit(new CopyFile(from, to, i, meta, byDay)));
+            sum += meta.size();
         }
 
-        for(Future f : calls){
+        for (Future f : calls) {
             try {
                 f.get();
             } catch (ExecutionException ex) {
@@ -125,8 +146,8 @@ public class MediaBackupApp {
             }
         }
         executor.shutdown();
-        
-        System.out.println("Copie déterminée des "+dates.size()+" images");
+
+        System.out.println("Copie déterminée des " + dates.size() + " images");
     }
 
 }

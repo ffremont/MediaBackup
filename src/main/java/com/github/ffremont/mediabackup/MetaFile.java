@@ -16,35 +16,43 @@ public class MetaFile {
     private LocalDateTime created;
     private Path path;
     private long size;
-
-    public MetaFile(LocalDateTime created, Path path, long size) {
+    private String hash;
+    
+    public MetaFile(Path path, long size, String hash) {
         this.path = path;
         this.size = size;
-        this.created = created;
+        this.hash = hash;
     }
     
-    public Path getPath() {
+    public Path path() {
         return path;
     }
 
-    public void setPath(Path path) {
+    public void path(Path path) {
         this.path = path;
     }
 
-    public long getSize() {
+    public long size() {
         return size;
     }
 
-    public void setSize(long size) {
+    public void size(long size) {
         this.size = size;
     }
 
-    public LocalDateTime getCreated() {
+    public LocalDateTime created() {
         return created;
     }
 
-    public void setCreated(LocalDateTime created) {
+    public void created(LocalDateTime created) {
         this.created = created;
     }
-    
+
+    public String hash() {
+        return hash;
+    }
+
+    public void hash(String hash) {
+        this.hash = hash;
+    }
 }

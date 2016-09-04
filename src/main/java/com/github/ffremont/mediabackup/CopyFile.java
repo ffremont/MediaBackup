@@ -25,11 +25,13 @@ import java.util.logging.Logger;
 public class CopyFile implements Runnable {
 
     private Path to;
+    private Path from;
     private final int numBloc;
     private final MetaFile metaFile;
     private boolean byDay;
 
-    public CopyFile(Path to, int i, MetaFile metaFile, boolean byDay) {
+    public CopyFile(Path from, Path to, int i, MetaFile metaFile, boolean byDay) {
+        this.from = from;
         this.numBloc = i;
         this.byDay = byDay;
         this.to = to;
@@ -39,21 +41,36 @@ public class CopyFile implements Runnable {
     @Override
     public void run() {
         try {
-            Path destination = destDirMedia(Paths.get(to.toAbsolutePath().toString(), numBloc + ""), metaFile.getCreated());
+            String filename = metaFile.path().getFileName().toString();
+            Path destination = destDirMedia(Paths.get(to.toAbsolutePath().toString(), numBloc + ""), metaFile.created());
             Files.createDirectories(destination);
+            
+            Path destinationFile = Paths.get(
+                    destination.toAbsolutePath().toString(),
+                    filename
+            );
 
             Files.copy(
-                    metaFile.getPath(),
-                    Paths.get(
-                            destination.toAbsolutePath().toString(),
-                            metaFile.getPath().getFileName().toString()
-                    ), StandardCopyOption.REPLACE_EXISTING);
+                    metaFile.path(),
+                    destinationFile, StandardCopyOption.REPLACE_EXISTING);
+            
+            
+            Path linkPath = Paths.get(
+                    this.metaFile.path().toAbsolutePath().toString().replace(
+                            from.toAbsolutePath().toString(), 
+                            Paths.get(to.toAbsolutePath().toString(), numBloc+"", "links").toAbsolutePath().toString()
+                    ).replace(filename, ""));
+            Files.createDirectories(linkPath);
+            Files.createSymbolicLink(Paths.get(linkPath.toAbsolutePath().toString(), filename), destinationFile);
         } catch (IOException ex) {
             Logger.getLogger(CopyFile.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
     public Path destDirMedia(Path to, LocalDateTime date) {
+        if(date == null){
+            return Paths.get(to.toAbsolutePath().toString(), "non triés");
+        }        
         Optional<Condition> con = MediaBackupApp.conditions.stream().filter(c -> c.accept(date)).findFirst();
 
         String mois = date.format(DateTimeFormatter.ofPattern("MMMM", Locale.FRENCH));
