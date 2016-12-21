@@ -51,7 +51,9 @@ public class MediaBackupApp {
                         sorted((a, b) -> b.compareTo(a)). // reverse; files before dirs
                         forEach(p -> {
                             try {
-                                Files.delete(p);
+                                if(!p.equals(directoryToDelete)){
+                                    Files.delete(p);
+                                }
                             } catch (IOException e) { /* ... */ }
                         });
             }
@@ -64,8 +66,17 @@ public class MediaBackupApp {
         long blocsize = System.getProperty("blocsize") != null ? Long.valueOf(System.getProperty("blocsize")) : -1;
         Path from = System.getProperty("from") != null ? Paths.get(System.getProperty("from")) : Paths.get("from");
         Path to = System.getProperty("to") != null ? Paths.get(System.getProperty("to")) : Paths.get("to");
+        
         boolean byDay = System.getProperty("byDay") != null;
-        clear(to);
+        boolean force = System.getProperty("force") != null;
+        if(force){
+            clear(to);
+        }
+        
+        if(!Files.exists(to)){
+            System.err.println("Le répertoire "+to.toAbsolutePath().toString()+" doit exister");
+            System.exit(1);
+        }
 
         Path legPath = Paths.get("legendes.properties");
         if (Files.exists(legPath)) {
@@ -91,7 +102,7 @@ public class MediaBackupApp {
                     Iterable<Directory> it = metadata.getDirectories();
                     for (Directory dir : it) {
                         for (Tag tag : dir.getTags()) {
-                            if (tag.getTagType() == DATE_TIME_ORIGINAL) {
+                            if (tag.getTagType() == DATE_TIME_ORIGINAL && (dir.getDate(tag.getTagType()) != null)) {
                                 sha1knownCreationDate.add(hashOfFile);
                                 System.out.println(filePath);
                                 LocalDateTime created = LocalDateTime.ofInstant(dir.getDate(tag.getTagType()).toInstant(), ZoneId.systemDefault());

@@ -44,33 +44,47 @@ public class CopyFile implements Runnable {
             String filename = metaFile.path().getFileName().toString();
             Path destination = destDirMedia(Paths.get(to.toAbsolutePath().toString(), numBloc + ""), metaFile.created());
             Files.createDirectories(destination);
-            
+
             Path destinationFile = Paths.get(
                     destination.toAbsolutePath().toString(),
                     filename
             );
 
-            Files.copy(
-                    metaFile.path(),
-                    destinationFile, StandardCopyOption.REPLACE_EXISTING);
-            
-            
+            if (Files.exists(destinationFile)) {
+                String hashOfFileDestinationFile = HashFile.sha1(destinationFile);
+                if (hashOfFileDestinationFile.equals(metaFile.hash())) {
+                    System.out.println(destinationFile.toAbsolutePath().toString() + " existe déjà");
+                } else {
+                    Files.copy(
+                            metaFile.path(),
+                            destinationFile, StandardCopyOption.REPLACE_EXISTING);
+                    System.out.println(destinationFile.toAbsolutePath().toString() + " copié");
+                }
+            } else {
+                Files.copy(
+                        metaFile.path(),
+                        destinationFile, StandardCopyOption.REPLACE_EXISTING);
+                System.out.println(destinationFile.toAbsolutePath().toString() + " copié");
+            }
+
             Path linkPath = Paths.get(
                     this.metaFile.path().toAbsolutePath().toString().replace(
-                            from.toAbsolutePath().toString(), 
-                            Paths.get(to.toAbsolutePath().toString(), numBloc+"", "links").toAbsolutePath().toString()
+                            from.toAbsolutePath().toString(),
+                            Paths.get(to.toAbsolutePath().toString(), numBloc + "", "links").toAbsolutePath().toString()
                     ).replace(filename, ""));
             Files.createDirectories(linkPath);
-            Files.createSymbolicLink(Paths.get(linkPath.toAbsolutePath().toString(), filename), destinationFile);
+            if(!Files.exists(linkPath)){
+                Files.createSymbolicLink(Paths.get(linkPath.toAbsolutePath().toString(), filename), destinationFile);
+            }
         } catch (IOException ex) {
             Logger.getLogger(CopyFile.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
     public Path destDirMedia(Path to, LocalDateTime date) {
-        if(date == null){
+        if (date == null) {
             return Paths.get(to.toAbsolutePath().toString(), "non triés");
-        }        
+        }
         Optional<Condition> con = MediaBackupApp.conditions.stream().filter(c -> c.accept(date)).findFirst();
 
         String mois = date.format(DateTimeFormatter.ofPattern("MMMM", Locale.FRENCH));
@@ -81,9 +95,9 @@ public class CopyFile implements Runnable {
 
         if (con.isPresent()) {
             if (con.get().oneDay() && byDay) {
-                jr = jr+ " - "+con.get().getLabel();
+                jr = jr + " - " + con.get().getLabel();
             } else {
-                mois = mois+" - "+con.get().getLabel();
+                mois = mois + " - " + con.get().getLabel();
             }
         }
         return Paths.get(to.toAbsolutePath().toString(),
